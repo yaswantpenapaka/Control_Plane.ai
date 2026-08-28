@@ -1,0 +1,32 @@
+workflow: internal-summarizer
+risk_tier: low
+
+error_budget:
+  target: 0.05
+  window: 7d
+
+latency_budget_ms: 3000
+
+evidence:
+  required: false
+  min_entailment: 0.50
+  abstain_without_evidence: false
+
+privacy:
+  pii:
+    - EMAIL
+    - PHONE
+    - PAN
+    - AADHAAR
+    - ACCOUNT_NO
+  action_on_hit: edit
+
+tools: {}
+
+interventions:
+  ladder:
+    - allow
+    - edit
+    - escalate
+    - block
+  max_regenerations: 0

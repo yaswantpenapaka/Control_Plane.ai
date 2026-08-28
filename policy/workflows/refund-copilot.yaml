@@ -1,0 +1,48 @@
+workflow: refund-copilot
+risk_tier: high
+
+error_budget:
+  target: 0.005
+  window: 7d
+
+latency_budget_ms: 2500
+
+evidence:
+  required: true
+  min_entailment: 0.70
+  abstain_without_evidence: true
+
+privacy:
+  pii:
+    - EMAIL
+    - PHONE
+    - PAN
+    - AADHAAR
+    - ACCOUNT_NO
+  action_on_hit: edit
+
+tools:
+  issue_refund:
+    gate: true
+    max_amount: 5000
+    prohibited_if:
+      - unsupported_claim
+      - evidence_failed
+      - budget_exhausted
+  lookup_customer:
+    gate: false
+  cancel_subscription:
+    gate: true
+    prohibited_if:
+      - evidence_failed
+  change_address:
+    gate: false
+
+interventions:
+  ladder:
+    - allow
+    - edit
+    - regenerate
+    - escalate
+    - block
+  max_regenerations: 1
