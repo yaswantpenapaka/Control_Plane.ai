@@ -8,6 +8,8 @@ from config.settings import get_settings
 from llm.groq_client import GroqClient
 from llm.schemas import ChatRequest, ChatResponse
 from policy.engine import PolicyEngine
+from controlplane.service import GovernanceOrchestrator
+from demo.fixtures import get_demo_response
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +17,7 @@ app = FastAPI(title="ControlPlane Gateway")
 settings = get_settings()
 groq_client = GroqClient(settings)
 policy_engine = PolicyEngine()
+orchestrator = GovernanceOrchestrator()
 
 
 class RequestState:
@@ -51,8 +54,9 @@ async def controlplane_health():
         "mode": settings.controlplane_mode,
         "groq_configured": bool(settings.groq_api_key) if settings.is_live_mode else None,
         "policy_loaded": len(policy_engine.list_workflows()) > 0,
-        "embedding_loaded": False,
-        "nli_loaded": False,
+        "embedding_loaded": orchestrator.retriever.embedder.model is not None,
+        "nli_loaded": orchestrator.nli_verifier.model is not None,
+        "orchestrator_ready": True,
     }
 
 
@@ -70,28 +74,41 @@ async def chat_completions(
 
         logger.info(f"Processing request for workflow: {workflow}")
 
-        response, tokens_used, estimated_cost = groq_client.chat_completion(
-            messages=request.messages,
-            temperature=request.temperature or 0.7,
-            tools=request.tools,
-        )
+        # Get LLM response (real for LIVE, simulated for DEMO)
+        if settings.is_demo_mode:
+            response = get_demo_response(workflow, request.messages)
+            tokens_used = {"input_tokens": 0, "output_tokens": 0}
+            estimated_cost = 0.0
+            logger.info("Using DEMO mode response")
+        else:
+            response, tokens_used, estimated_cost = groq_client.chat_completion(
+                messages=request.messages,
+                temperature=request.temperature or 0.7,
+                tools=request.tools,
+            )
 
-        if not response:
-            if settings.is_live_mode:
+            if not response:
                 raise HTTPException(
                     status_code=503,
                     detail="Groq service unavailable. Try DEMO or REPLAY mode.",
                 )
-            else:
-                response = ChatResponse(
-                    content="[DEMO MODE] This is a placeholder response.",
-                    role="assistant",
-                )
-                tokens_used = {"input_tokens": 0, "output_tokens": 0}
-                estimated_cost = 0.0
+
+        # Run governance pipeline
+        decision_result, audit_event = orchestrator.process(
+            response=response,
+            policy=policy,
+            messages=request.messages,
+            session_id=request.session_id,
+        )
+
+        # Apply intervention if needed
+        final_response = response
+        if decision_result.intervention_type == "redact_pii":
+            pii_spans = orchestrator.pii_detector.detect(response.content)
+            final_response = orchestrator.apply_intervention(response, decision_result.decision, pii_spans)
 
         return {
-            "id": f"chatcmpl-{hash(str(request.messages))}",
+            "id": f"chatcmpl-{audit_event.id}",
             "object": "chat.completion",
             "created": int(datetime.now().timestamp()),
             "model": settings.groq_model,
@@ -99,8 +116,8 @@ async def chat_completions(
                 {
                     "index": 0,
                     "message": {
-                        "role": response.role,
-                        "content": response.content,
+                        "role": final_response.role,
+                        "content": final_response.content,
                     },
                     "finish_reason": "stop",
                 }
@@ -109,6 +126,16 @@ async def chat_completions(
                 "prompt_tokens": tokens_used.get("input_tokens", 0),
                 "completion_tokens": tokens_used.get("output_tokens", 0),
                 "total_tokens": sum(tokens_used.values()),
+            },
+            "controlplane": {
+                "audit_id": str(audit_event.id),
+                "decision": decision_result.decision.value,
+                "risk_state": decision_result.risk_state.value,
+                "reason_codes": decision_result.reason_codes,
+                "confidence": decision_result.confidence,
+                "intervention": decision_result.intervention_type,
+                "tool_executed": decision_result.tool_decision.allowed if decision_result.tool_decision else None,
+                "latency_ms": audit_event.latency_ms,
             },
             "metadata": {
                 "workflow": workflow,
@@ -120,7 +147,7 @@ async def chat_completions(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error in chat completion: {e}")
+        logger.error(f"Error in chat completion: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

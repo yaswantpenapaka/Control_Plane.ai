@@ -111,6 +111,7 @@ class Database:
         logger.info(f"Database initialized at {self.db_path}")
 
     def insert_audit_event(self, event: Dict[str, Any]) -> int:
+        import json
         conn = self._get_connection()
         cursor = conn.cursor()
 
@@ -132,13 +133,13 @@ class Database:
                 event.get("model"),
                 event.get("input_hash"),
                 event.get("output_hash"),
-                event.get("checks"),
+                json.dumps(event.get("checks")) if event.get("checks") else None,
                 event.get("risk_state"),
                 event.get("decision"),
-                event.get("reason_codes"),
+                json.dumps(event.get("reason_codes")) if event.get("reason_codes") else None,
                 event.get("tool_name"),
                 event.get("tool_args_hash"),
-                event.get("token_usage"),
+                json.dumps(event.get("token_usage")) if event.get("token_usage") else None,
                 event.get("estimated_cost"),
                 event.get("latency_ms"),
                 event.get("regeneration_count"),

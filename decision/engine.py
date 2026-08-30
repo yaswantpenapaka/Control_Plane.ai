@@ -11,6 +11,7 @@ from llm.schemas import (
     LaneBResult,
     DecisionResult,
     ToolDecision,
+    ClaimVerification,
 )
 from checks.pii import PiiDetector
 from checks.tools import ToolPolicyValidator
@@ -130,20 +131,19 @@ class DecisionEngine:
                     entailment_threshold=policy.evidence.min_entailment,
                 )
 
-                verification = {
-                    "claim": claim,
-                    "evidence": evidence,
-                    "risk_state": risk_state,
-                    "entailment": ent_score,
-                    "neutral": neutral_score,
-                    "contradiction": contra_score,
-                }
+                verification = ClaimVerification(
+                    claim=claim,
+                    entailment_score=ent_score,
+                    neutral_score=neutral_score,
+                    contradiction_score=contra_score,
+                    risk_state=risk_state,
+                )
                 verifications.append(verification)
 
                 if best_verification is None or risk_state != RiskState.UNVERIFIED:
                     best_verification = verification
 
-        risk_states = [v["risk_state"] for v in verifications] if verifications else [RiskState.UNVERIFIED]
+        risk_states = [v.risk_state for v in verifications] if verifications else [RiskState.UNVERIFIED]
 
         if RiskState.CONTRADICTED in risk_states:
             overall_risk_state = RiskState.CONTRADICTED

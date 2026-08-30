@@ -1,5 +1,6 @@
 import logging
 from typing import Tuple, Optional
+import numpy as np
 from sentence_transformers import CrossEncoder
 from llm.schemas import RiskState, Claim, EvidenceChunk
 
@@ -11,7 +12,7 @@ class NLIVerifier:
         self.model_name = model_name
         self.model = None
         self._load_model()
-        self.label_map = {"ENTAILMENT": 0, "NEUTRAL": 1, "CONTRADICTION": 2}
+        self.label_map = {"CONTRADICTION": 0, "ENTAILMENT": 1, "NEUTRAL": 2}
 
     def _load_model(self):
         try:
@@ -32,19 +33,19 @@ class NLIVerifier:
             return RiskState.UNVERIFIED, 0.0, 0.0, 0.0
 
         try:
-            sentence_pairs = [[claim.text, evidence_chunk.content]]
-            scores = self.model.predict(sentence_pairs)
+            sentence_pairs = [[evidence_chunk.content, claim.text]]
+            logits = self.model.predict(sentence_pairs)[0]
 
-            scores = scores[0]
+            probs = self._softmax(logits)
 
-            entailment_score = float(scores[self.label_map["ENTAILMENT"]])
-            neutral_score = float(scores[self.label_map["NEUTRAL"]])
-            contradiction_score = float(scores[self.label_map["CONTRADICTION"]])
+            contradiction_score = float(probs[self.label_map["CONTRADICTION"]])
+            entailment_score = float(probs[self.label_map["ENTAILMENT"]])
+            neutral_score = float(probs[self.label_map["NEUTRAL"]])
 
-            if entailment_score >= entailment_threshold:
-                risk_state = RiskState.ENTAILED
-            elif contradiction_score >= contradiction_threshold:
+            if contradiction_score >= contradiction_threshold:
                 risk_state = RiskState.CONTRADICTED
+            elif entailment_score >= entailment_threshold:
+                risk_state = RiskState.ENTAILED
             else:
                 risk_state = RiskState.UNVERIFIED
 
@@ -53,6 +54,12 @@ class NLIVerifier:
         except Exception as e:
             logger.error(f"NLI verification failed: {e}")
             return RiskState.UNVERIFIED, 0.0, 0.0, 0.0
+
+    @staticmethod
+    def _softmax(logits):
+        logits_array = np.array(logits, dtype=np.float32)
+        exp_logits = np.exp(logits_array - np.max(logits_array))
+        return exp_logits / np.sum(exp_logits)
 
     def aggregate_verification_results(
         self,

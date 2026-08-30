@@ -1,8 +1,8 @@
-# ControlPlane.ai
+# ControlPlane-ai
 
 ### Models generate. ControlPlane governs.
 
-**ControlPlane.ai** is an AI governance middleware that sits between an enterprise AI application and its model provider, applying workflow-specific policies to generated responses and proposed actions before they reach a user or execute a tool.
+**ControlPlane-ai** is an AI governance middleware that sits between an enterprise AI application and its model provider, applying workflow-specific policies to generated responses and proposed actions before they reach a user or execute a tool.
 
 ---
 
@@ -16,7 +16,7 @@ Modern AI systems generate fluent, confident responses that can be:
 
 ## Solution
 
-ControlPlane.ai implements a **workflow-specific governance layer** with:
+ControlPlane-ai implements a **workflow-specific governance layer** with:
 
 - **Evidence verification** — Claims are checked against trusted local evidence using NLI
 - **Risk routing** — Cheap checks handle all traffic; expensive verification runs only when needed
@@ -446,17 +446,12 @@ print(response.metadata)
 
 **Team:** VARANASI  
 **Challenge:** Accenture Innovation Challenge 2026 — Round 2  
-**Prototype:** ControlPlane.ai  
+**Prototype:** ControlPlane-ai  
 **Submission Deadline:** August 30, 2026
 
 ---
 
-## Questions?
 
-See the [prototype system design](prototype-system-design.md) and [implementation prompt](claude_code_prompt.md) for full technical specifications.
-
----
-
-**ControlPlane.ai — Governance Layer for AI Workflows**
+**ControlPlane-ai — Governance Layer for AI Workflows**
 
 *"The difference between a model and a system is accountability."*
